@@ -5,7 +5,7 @@
             :url "https://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [org.clojure/clojurescript "1.8.51"]
-                 [com.nimbusds/oauth2-oidc-sdk "5.9.1"]
+                 [com.nimbusds/oauth2-oidc-sdk "5.9.1" :exclusions [com.nimbusds/nimbus-jose-jwt]]
 
                  [http-kit "2.1.18"]
                  [ring/ring-defaults "0.1.5"]
