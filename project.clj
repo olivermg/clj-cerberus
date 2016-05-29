@@ -1,8 +1,8 @@
-(defproject oauthtest "0.1.0-SNAPSHOT"
-  :description "FIXME: write description"
-  :url "http://example.com/FIXME"
-  :license {:name "Eclipse Public License"
-            :url "http://www.eclipse.org/legal/epl-v10.html"}
+(defproject clj-cerberus "0.1.0-SNAPSHOT"
+  :description "Offering simple Ring compatible handlers for OpenID Connect"
+  :url "http://github.com/olivermg/clj-cerberus"
+  :license {:name "The MIT License"
+            :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [org.clojure/clojurescript "1.8.51"]
                  [com.nimbusds/oauth2-oidc-sdk "5.9"]
