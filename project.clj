@@ -1,8 +1,8 @@
 (defproject clj-cerberus "0.1.0-SNAPSHOT"
   :description "Offering simple Ring compatible handlers for OpenID Connect"
   :url "http://github.com/olivermg/clj-cerberus"
-  :license {:name "Apache License, Version 2.0"
-            :url "http://www.apache.org/licenses/LICENSE-2.0"}
+  :license {:name "The MIT License"
+            :url "https://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [org.clojure/clojurescript "1.8.51"]
                  [com.nimbusds/oauth2-oidc-sdk "5.9"]
