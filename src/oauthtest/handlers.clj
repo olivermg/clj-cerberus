@@ -1,6 +1,5 @@
 (ns oauthtest.handlers
-  (:refer-clojure :rename {send send-clj})
-  (:require [ring.util.request :as r])
+  (:require [cheshire.core :as ch])
   (:import [com.nimbusds.openid.connect.sdk AuthenticationRequest]
            [com.nimbusds.openid.connect.sdk AuthenticationResponseParser]
            [com.nimbusds.openid.connect.sdk Nonce]
@@ -24,32 +23,6 @@
            [java.net URL]))
 
 
-(def state (atom nil))
-(def nonce (atom nil))
-
-
-(defn auth-request [client-id provider-uri redirect-uri scopes]
-  (reset! state (State.))
-  (reset! nonce (Nonce.))
-  (AuthenticationRequest. (URI. provider-uri)
-                          (ResponseType. (into-array ["code"]))
-                          (Scope. (into-array scopes))
-                          (ClientID. client-id)
-                          (URI. redirect-uri)
-                          @state
-                          @nonce))
-
-(defn send [auth-req]
-  (-> auth-req .toHTTPRequest .send))
-
-(defn make-auth-handler [client-id provider-uri redirect-uri scopes]
-  (let [areq (auth-request client-id provider-uri redirect-uri scopes)
-        code-uri (.toURI areq)]
-    (fn [req]
-      {:status 302
-       :headers {"Location" code-uri}})))
-
-
 (defn- handle-error [msg info]
   (println msg info)
   (throw (ex-info msg info)))
@@ -62,6 +35,23 @@
               :uri (.getURI err)}]
     (handle-error (str "ERROR: " (:message info))
                   info)))
+
+
+(defn make-auth-request [client-id provider-uri redirect-uri scopes]
+  (let [state (State.)
+        nonce (Nonce.)
+        req (AuthenticationRequest. (URI. provider-uri)
+                                    (ResponseType. (into-array ["code"]))
+                                    (Scope. (into-array scopes))
+                                    (ClientID. client-id)
+                                    (URI. redirect-uri)
+                                    state
+                                    nonce)]
+    {:state state
+     :nonce nonce
+     :request req
+     :uri (.toURI req)}))
+
 
 (defn- auth-response->token-request [res expected-state client-id client-secret token-uri redirect-uri]
   (if (.indicatesSuccess res)
@@ -92,19 +82,15 @@
                                           JWSAlgorithm/RS256
                                           (URL. jwks-uri))
           jwt (JWTParser/parse (:id-token cljres))
-          claims (.validate jwtvalidator jwt expected-nonce)]
-      (-> claims .toJSONObject .toJSONString))
+          claims (.validate jwtvalidator jwt expected-nonce)
+          cljclaims (ch/parse-string (-> claims .toJSONObject .toJSONString))]
+      (assoc cljres :id-token-payload cljclaims))
     ;;; we have a TokenErrorResponse here
     (handle-nimbus-error res)))
 
-(defn make-code-handler [client-id client-secret issuer token-uri redirect-uri jwks-uri]
-  (fn [req]
-    (println "REQ" req)
-    (println "REQUEST-URL" (r/request-url req))
-    (let [tres (AuthenticationResponseParser/parse (URI. (r/request-url req)))
-          treq (auth-response->token-request tres @state client-id client-secret token-uri redirect-uri)
-          tres (TokenResponse/parse (-> treq .toHTTPRequest .send))
-          claims (token-response->claims tres @nonce issuer client-id jwks-uri)])
-    {:status 200
-     :headers {"Content-type" "text/html"}
-     :body "<!DOCTYPE HTML><html><body><a href=\"/auth\">back to login</a></body></html>"}))
+(defn make-token-request [request-url client-id client-secret state nonce issuer token-uri redirect-uri jwks-uri]
+  (let [tres (AuthenticationResponseParser/parse (URI. request-url))
+        treq (auth-response->token-request tres state client-id client-secret token-uri redirect-uri)
+        tres (TokenResponse/parse (-> treq .toHTTPRequest .send))
+        claims (token-response->claims tres nonce issuer client-id jwks-uri)]
+    claims))

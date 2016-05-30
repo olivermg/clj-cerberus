@@ -1,6 +1,7 @@
 (ns oauthtest.core
   (:require [oauthtest.handlers :as h]
             [org.httpkit.server :as hs]
+            [ring.util.request :as rr]
             [compojure.core :refer [defroutes context GET POST]]
             [compojure.handler :refer [site]]))
 
@@ -30,7 +31,10 @@
                 })
 
 
-(def server (atom nil))
+(defonce server (atom nil))
+;;; FIXME: evil stuff, just for demonstration though:
+(defonce laststate (atom nil))
+(defonce lastnonce (atom nil))
 
 
 (comment (defn get-env []
@@ -39,18 +43,34 @@
             :provideruri (System/getenv "PROVIDERURI")
             :redirecturi (System/getenv "REDIRECTURI")}))
 
+
 (defroutes auth-routes
   (context "/auth" []
-           (GET "/"     [] (h/make-auth-handler (:client-id conn-data)
-                                                (:provider-url conn-data)
-                                                (:redirect-url conn-data)
-                                                (:scopes conn-data)))
-           (GET "/code" [] (h/make-code-handler (:client-id conn-data)
-                                                (:client-secret conn-data)
-                                                (:issuer conn-data)
-                                                (:token-url conn-data)
-                                                (:redirect-url conn-data)
-                                                (:jwks-url conn-data)))))
+           (GET "/"     [] (fn [req]
+                             (let [{:keys [state nonce uri]} (h/make-auth-request (:client-id conn-data)
+                                                                                  (:provider-url conn-data)
+                                                                                  (:redirect-url conn-data)
+                                                                                  (:scopes conn-data))]
+                               (reset! laststate state)
+                               (reset! lastnonce nonce)
+                               {:status 302
+                                :headers {"Location" uri}})))
+           (GET "/code" [] (fn [req]
+                             (let [claims (h/make-token-request (rr/request-url req)
+                                                                (:client-id conn-data)
+                                                                (:client-secret conn-data)
+                                                                @laststate
+                                                                @lastnonce
+                                                                (:issuer conn-data)
+                                                                (:token-url conn-data)
+                                                                (:redirect-url conn-data)
+                                                                (:jwks-url conn-data))]
+                               {:status 200
+                                :headers {"Content-type" "text/html"}
+                                :body (str "<!DOCTYPE HTML><html><body><div>"
+                                           claims
+                                           "</div><a href=\"/auth\">back to login</a></body></html>")})))))
+
 
 (defn start []
   (reset! server (hs/run-server (site #'auth-routes)
