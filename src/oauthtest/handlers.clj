@@ -1,15 +1,18 @@
 (ns oauthtest.handlers
-  (:require [cheshire.core :as ch])
+  (:require [cheshire.core :as ch]
+            [ring.util.codec :as rc])
   (:import [com.nimbusds.openid.connect.sdk AuthenticationRequest]
            [com.nimbusds.openid.connect.sdk AuthenticationResponseParser]
            [com.nimbusds.openid.connect.sdk Nonce]
            [com.nimbusds.openid.connect.sdk.validators IDTokenValidator]
            [com.nimbusds.oauth2.sdk AuthorizationCode]
            [com.nimbusds.oauth2.sdk AuthorizationCodeGrant]
+           [com.nimbusds.oauth2.sdk AuthorizationResponse]
            [com.nimbusds.oauth2.sdk Scope]
            [com.nimbusds.oauth2.sdk ResponseType]
            [com.nimbusds.oauth2.sdk TokenRequest]
            [com.nimbusds.oauth2.sdk TokenResponse]
+           [com.nimbusds.oauth2.sdk AccessTokenResponse]
            [com.nimbusds.oauth2.sdk.auth ClientAuthentication]
            [com.nimbusds.oauth2.sdk.auth ClientAuthenticationMethod]
            [com.nimbusds.oauth2.sdk.auth ClientSecretBasic]
@@ -69,28 +72,43 @@
     ;;; we have an AuthorizationErrorResponse here
     (handle-nimbus-error res)))
 
+(defn- decode-jwt [jwt expected-nonce expected-issuer client-id jwks-uri]
+  (let [jwtvalidator (IDTokenValidator. (Issuer. expected-issuer)
+                                        (ClientID. client-id)
+                                        JWSAlgorithm/RS256
+                                        (URL. jwks-uri))
+        jwt-parsed (JWTParser/parse jwt)
+        claims (.validate jwtvalidator jwt expected-nonce)
+        cljclaims (ch/parse-string (-> claims .toJSONObject .toJSONString))]
+    cljclaims))
+
 (defn- token-response->claims [res expected-nonce expected-issuer client-id jwks-uri]
   (if (.indicatesSuccess res)
     ;;; we have an AccessTokenResponse here
-    (let [jsonres (.toJSONObject res)
-          cljres {:id-token (.get jsonres "id_token")
-                  :access-token (.get jsonres "access_token")
+    (let [jsonres (.getContentAsJSONObject res)
+          jwt (.get jsonres "id_token")
+          cljres {:access-token (.get jsonres "access_token")
                   :token-type (.get jsonres "token_type")
-                  :expires-in (.get jsonres "expires_in")}
-          jwtvalidator (IDTokenValidator. (Issuer. expected-issuer)
-                                          (ClientID. client-id)
-                                          JWSAlgorithm/RS256
-                                          (URL. jwks-uri))
-          jwt (JWTParser/parse (:id-token cljres))
-          claims (.validate jwtvalidator jwt expected-nonce)
-          cljclaims (ch/parse-string (-> claims .toJSONObject .toJSONString))]
-      (assoc cljres :id-token-payload cljclaims))
+                  :expires-in (.get jsonres "expires_in")}]
+      (if (:id-token cljres)
+        (merge cljres
+               {:id-token jwt
+                :id-token-payload (decode-jwt jwt expected-nonce expected-issuer
+                                              client-id jwks-uri)})
+        cljres))
     ;;; we have a TokenErrorResponse here
     (handle-nimbus-error res)))
 
 (defn make-token-request [request-url client-id client-secret state nonce issuer token-uri redirect-uri jwks-uri]
-  (let [tres (AuthenticationResponseParser/parse (URI. request-url))
-        treq (auth-response->token-request tres state client-id client-secret token-uri redirect-uri)
-        tres (TokenResponse/parse (-> treq .toHTTPRequest .send))
-        claims (token-response->claims tres nonce issuer client-id jwks-uri)]
+  (let [ares (AuthenticationResponseParser/parse (URI. request-url))
+        _ (println "ARES")
+        treq (auth-response->token-request ares state client-id client-secret token-uri redirect-uri)
+        _ (println "TREQ" (-> treq .toHTTPRequest))
+        tres (-> treq .toHTTPRequest .send)
+        ;;_ (println "TRES1" tres1 (.getHeaders tres1) (.getStatusCode tres1) (.getContent tres1))
+        ;;tres (AccessTokenResponse/parse tres1)
+        _ (println "TRES")
+        _ (println (rc/form-decode (.getContent tres)))
+        claims (token-response->claims tres nonce issuer client-id jwks-uri)
+        _ (println "CLAIMS")]
     claims))
