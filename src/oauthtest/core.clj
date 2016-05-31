@@ -10,8 +10,8 @@
                   ;;; (contrary to this example, you probably want to keep client-secret private, so
                   ;;; you'll probably want to get it from some config instead of hardcoding it in
                   ;;; your source code):
-                  :client-id     "817304564499-tg8htvvunf7ds8rbp0jc30ijm20odo7k.apps.googleusercontent.com"
-                  :client-secret "dFlqsKkhk0oA1se3zk5AUKYJ"
+                  :client-id     google-client-id
+                  :client-secret google-client-secret
 
                   ;;; redirect-url: Point this to the url you want users to be redirected to after they've
                   ;;;   completed authentication at the OP (note that you might have to tell your OP a list
@@ -30,8 +30,8 @@
                   :jwks-url      "https://www.googleapis.com/oauth2/v3/certs"
                   })
 
-(def github-data {:client-id     "65eacce92b11d7422fed"
-                  :client-secret "831a93010452b94404f0c700d471c9dd29ba0260"
+(def github-data {:client-id     github-client-id
+                  :client-secret github-client-secret
                   :redirect-url  "http://localhost:8899/auth/code"
                   :scopes        ["openid" "user:email"]
                   :issuer        ""
@@ -46,13 +46,6 @@
 ;;; FIXME: evil stuff, just for demonstration though:
 (defonce laststate (atom nil))
 (defonce lastnonce (atom nil))
-
-
-(comment (defn get-env []
-           {:clientid (System/getenv "CLIENTID")
-            :clientsecret (System/getenv "CLIENTSECRET")
-            :provideruri (System/getenv "PROVIDERURI")
-            :redirecturi (System/getenv "REDIRECTURI")}))
 
 
 (defroutes auth-routes
