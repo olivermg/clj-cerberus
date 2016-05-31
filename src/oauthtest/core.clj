@@ -39,7 +39,7 @@
                   :token-url     "https://github.com/login/oauth/access_token"
                   :jwks-url      ""})
 
-(def data github-data)
+(def data google-data)
 
 
 (defonce server (atom nil))

@@ -8,7 +8,6 @@
                  [com.nimbusds/oauth2-oidc-sdk "5.9.1"]
                  [cheshire "5.6.1"]
 
-                 ;;; only needed for examples:
                  [http-kit "2.1.18"]
                  [ring/ring-defaults "0.1.5"]
                  [compojure "1.4.0"]

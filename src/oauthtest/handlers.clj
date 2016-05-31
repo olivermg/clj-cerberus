@@ -1,6 +1,7 @@
 (ns oauthtest.handlers
   (:require [cheshire.core :as ch]
-            [ring.util.codec :as rc])
+            [ring.util.codec :as rc]
+            [clojure.string :as str])
   (:import [com.nimbusds.openid.connect.sdk AuthenticationRequest]
            [com.nimbusds.openid.connect.sdk AuthenticationResponseParser]
            [com.nimbusds.openid.connect.sdk Nonce]
@@ -78,24 +79,41 @@
                                         JWSAlgorithm/RS256
                                         (URL. jwks-uri))
         jwt-parsed (JWTParser/parse jwt)
-        claims (.validate jwtvalidator jwt expected-nonce)
+        claims (.validate jwtvalidator jwt-parsed expected-nonce)
         cljclaims (ch/parse-string (-> claims .toJSONObject .toJSONString))]
     cljclaims))
 
-(defn- token-response->claims [res expected-nonce expected-issuer client-id jwks-uri]
+(defn- response-to-map [getfn]
+  {:access-token (getfn "access_token")
+   :token-type (getfn "token_type")
+   :expires-in (getfn "expires_in")
+   :scope (getfn "scope")})
+
+(defn- decode-json-response [res client-id expected-nonce expected-issuer jwks-uri]
+  (let [jsonres (.getContentAsJSONObject res)
+        jwt (.get jsonres "id_token")
+        cljres (response-to-map #(.get jsonres %))]
+    (if jwt
+      (merge cljres
+             {:id-token {:original jwt
+                         :verified true
+                         :payload (decode-jwt jwt expected-nonce expected-issuer
+                                              client-id jwks-uri)}})
+      cljres)))
+
+(defn- decode-wwwform-response [res]
+  (let [dec (rc/form-decode (.getContent res))]
+    (println dec)
+    (response-to-map #(get dec %))))
+
+(defn- decode-response [res client-id expected-nonce expected-issuer jwks-uri]
   (if (.indicatesSuccess res)
-    ;;; we have an AccessTokenResponse here
-    (let [jsonres (.getContentAsJSONObject res)
-          jwt (.get jsonres "id_token")
-          cljres {:access-token (.get jsonres "access_token")
-                  :token-type (.get jsonres "token_type")
-                  :expires-in (.get jsonres "expires_in")}]
-      (if (:id-token cljres)
-        (merge cljres
-               {:id-token jwt
-                :id-token-payload (decode-jwt jwt expected-nonce expected-issuer
-                                              client-id jwks-uri)})
-        cljres))
+    ;;; we have an SuccessResponse here
+    (let [[ctype charset] (str/split (str/lower-case (.getContentType res))
+                                     #"[\s;\s]+")]
+      (case ctype
+        "application/json" (decode-json-response res client-id expected-nonce expected-issuer jwks-uri)
+        "application/x-www-form-urlencoded" (decode-wwwform-response res)))
     ;;; we have a TokenErrorResponse here
     (handle-nimbus-error res)))
 
@@ -108,7 +126,7 @@
         ;;_ (println "TRES1" tres1 (.getHeaders tres1) (.getStatusCode tres1) (.getContent tres1))
         ;;tres (AccessTokenResponse/parse tres1)
         _ (println "TRES")
-        _ (println (rc/form-decode (.getContent tres)))
-        claims (token-response->claims tres nonce issuer client-id jwks-uri)
+        ;;_ (println (rc/form-decode (.getContent tres)))
+        claims (decode-response tres client-id nonce issuer jwks-uri)
         _ (println "CLAIMS")]
     claims))
